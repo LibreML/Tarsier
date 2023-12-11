@@ -1,40 +1,68 @@
 pub mod read;
 
-// Defining the Column struct
-// For simplicity, we're assuming the data in each column is of type i32.
-// You can later modify this to use generics or enums for different data types.
-struct Column {
-    name: String,
-    data: Vec<i32>,
+use std::any::Any;
+
+struct Row<T> {
+    data: T,
 }
 
-// Defining the DataFrame struct
+struct Column<T> {
+    name: String,
+    rows: Vec<Row<T>>,
+}
+
 struct DataFrame {
-    columns: Vec<Column>,
+    columns: Vec<Box<dyn Any>>, // Using trait object to handle different types
 }
 
 impl DataFrame {
-    // Constructor for a new DataFrame
     fn new() -> DataFrame {
         DataFrame { columns: Vec::new() }
     }
 
-    // Add a new column to the DataFrame
-    // This function takes ownership of the column.
-    fn add_column(&mut self, column: Column) {
-        // You might want to add logic here to check for unique column names
-        self.columns.push(column);
+    // Add a new column
+    fn add_column<T: 'static>(&mut self, name: String) {
+        let column = Column::<T> {
+            name,
+            rows: Vec::new(),
+        };
+        self.columns.push(Box::new(column));
     }
 
-    // Access column by name
-    // Returns an Option, as the column may not exist
-    fn get_column_by_name(&self, name: &str) -> Option<&Column> {
-        self.columns.iter().find(|col| col.name == name)
+    // Add a new row to a specific column
+    fn add_row<T: 'static>(&mut self, column_name: &str, data: T) {
+        for column in &mut self.columns {
+            if let Some(col) = column.downcast_mut::<Column<T>>() {
+                if col.name == column_name {
+                    col.rows.push(Row { data });
+                    return;
+                }
+            }
+        }
+        println!("Column not found or type mismatch");
     }
 
-    // Access column by position
-    // Returns None if the index is out of bounds
-    fn get_column_by_index(&self, index: usize) -> Option<&Column> {
-        self.columns.get(index)
+    // Get column by name
+    fn get_column_by_name<T: 'static>(&self, name: &str) -> Option<&Column<T>> {
+        for column in &self.columns {
+            if let Some(col) = column.downcast_ref::<Column<T>>() {
+                if col.name == name {
+                    return Some(col);
+                }
+            }
+        }
+        None
+    }
+
+    // Get column by index
+    fn get_column_by_index<T: 'static>(&self, index: usize) -> Option<&Column<T>> {
+        self.columns.get(index)?.downcast_ref::<Column<T>>()
+    }
+
+    // Get a row from a specific column by row index
+    fn get_row<T: 'static>(&self, column_name: &str, row_index: usize) -> Option<&T> {
+        self.get_column_by_name::<T>(column_name)?.rows.get(row_index).map(|row| &row.data)
     }
 }
+
+// Implement Column and Row methods as needed
